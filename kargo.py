@@ -243,7 +243,8 @@ if st.button("Kontrolü Başlat"):
             text_color = "white"
             status_text = "Kargo Uğrama: "
             if shipped_date:
-                status_text += shipped_date.strftime('%d.%m.%Y %H:%M')
+                adjusted_date = shipped_date.replace(hour=shipped_date.hour + 3)
+                status_text += adjusted_date.strftime('%d.%m.%Y %H:%M')
         else:
             bg = "#FF4C4C"
             border = "2px solid #FF4C4C"
