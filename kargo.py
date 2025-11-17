@@ -266,19 +266,4 @@ if st.button("Kontrolü Başlat"):
                 </div>
             """, unsafe_allow_html=True)
 
-    # -------------------------------------------------------------------
-    # Log tablosu
-    # -------------------------------------------------------------------
-    st.subheader("📋 Sipariş Logları")
 
-    # Eğer tüm store_samples boşsa concat hata verir; guard ekleyelim
-    if len(store_samples) > 0 and any(not df.empty for df in store_samples.values()):
-        log_df = pd.concat([v for v in store_samples.values() if not v.empty], ignore_index=True)
-    else:
-        log_df = pd.DataFrame(columns=["store_name", "package_id_raw", "packed_at_dt", "shipped_at_dt"])
-
-    log_df_display = log_df[["store_name", "package_id_raw", "packed_at_dt", "shipped_at_dt"]]
-
-    st.dataframe(log_df_display)
-
-    st.success("Kontrol tamamlandı!")
