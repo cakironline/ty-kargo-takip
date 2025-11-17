@@ -134,7 +134,6 @@ def fetch_trendyol_order_status(package_id_raw: str):
 
     shipment_package = content[0]
 
-    # Trendyol Express Marketplace olmayanlar alınmaz
     cargo_provider = shipment_package.get("cargoProviderName", "")
     if cargo_provider != "Trendyol Express Marketplace":
         return None, None
@@ -180,28 +179,29 @@ if st.button("Kontrolü Başlat"):
     df["shipped_at_dt"] = pd.to_datetime(df.get("shipped_at"), errors="coerce")
 
     # -------------------------------------------------------------------
-    # Mağaza bazlı örnek sipariş seçimi → ÖNCE shipped_at, sonra packed_at
+    # Mağaza bazlı seçim → 1) shipped_at bugün olanlar 2) shipped yoksa packed_at bugün olanlar
     # -------------------------------------------------------------------
     store_samples = {}
-
     today_ts = pd.Timestamp(today).normalize()
 
     for store in df["store_name"].dropna().unique():
         store_df = df[df["store_name"] == store]
 
+        # 1) shipped_at bugünün tarihi olan siparişler (packed_at fark etmez)
         shipped_df = store_df[
             (~store_df["shipped_at_dt"].isna()) &
             (store_df["shipped_at_dt"].dt.normalize() == today_ts) &
             (store_df["shipped_at_dt"] < cutoff)
         ]
 
+        # 2) shipped_at YOK → packed_at bugünün tarihi olanlar
         packed_df = store_df[
+            (store_df["shipped_at_dt"].isna()) &
             (~store_df["packed_at_dt"].isna()) &
             (store_df["packed_at_dt"].dt.normalize() == today_ts) &
             (store_df["packed_at_dt"] < cutoff)
         ]
 
-        # Öncelik: shipped_at → packed_at
         if len(shipped_df) > 0:
             n = min(10, len(shipped_df))
             selected = shipped_df.sample(n=n, random_state=42)
@@ -276,7 +276,7 @@ if st.button("Kontrolü Başlat"):
             """, unsafe_allow_html=True)
 
     # -------------------------------------------------------------------
-    # Log tablosu ekleme
+    # Log tablosu
     # -------------------------------------------------------------------
     st.subheader("📋 Sipariş Logları")
 
