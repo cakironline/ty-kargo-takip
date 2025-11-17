@@ -99,8 +99,9 @@ def fetch_hamur_orders(start_date, end_date):
 
     return all_orders
 
+
 # -------------------------------------------------------------------
-# Trendyol – shipped tarihi alma + cargoProviderName kontrolü
+# Trendyol – shipped tarihi alma (cargoProviderName filtresi ile)
 # -------------------------------------------------------------------
 def fetch_trendyol_order_status(package_id_raw: str):
     if not package_id_raw:
@@ -133,7 +134,7 @@ def fetch_trendyol_order_status(package_id_raw: str):
 
     shipment_package = content[0]
 
-    # YENİ EKLENEN KONTROL
+    # Trendyol Express Marketplace olmayanlar alınmaz
     cargo_provider = shipment_package.get("cargoProviderName", "")
     if cargo_provider != "Trendyol Express Marketplace":
         return None, None
@@ -147,6 +148,7 @@ def fetch_trendyol_order_status(package_id_raw: str):
             break
 
     return status, shipped_created_date
+
 
 # -------------------------------------------------------------------
 # Streamlit UI
@@ -178,7 +180,7 @@ if st.button("Kontrolü Başlat"):
     df["shipped_at_dt"] = pd.to_datetime(df.get("shipped_at"), errors="coerce")
 
     # -------------------------------------------------------------------
-    # Mağaza bazlı örnek sipariş seçimi (ÖNCE shipped, sonra packed)
+    # Mağaza bazlı örnek sipariş seçimi → ÖNCE shipped_at, sonra packed_at
     # -------------------------------------------------------------------
     store_samples = {}
 
@@ -187,30 +189,34 @@ if st.button("Kontrolü Başlat"):
 
         shipped_df = store_df[
             (~store_df["shipped_at_dt"].isna()) &
-            (store_df["shipped_at_dt"].dt.date == today.date()) &
+            (store_df["shipped_at_dt"].dt.normalize() == today.normalize()) &
             (store_df["shipped_at_dt"] < cutoff)
         ]
 
         packed_df = store_df[
             (~store_df["packed_at_dt"].isna()) &
-            (store_df["packed_at_dt"].dt.date == today.date()) &
+            (store_df["packed_at_dt"].dt.normalize() == today.normalize()) &
             (store_df["packed_at_dt"] < cutoff)
         ]
 
-        # Öncelik: shipped → packed
+        # Öncelik: shipped_at → packed_at
         if len(shipped_df) > 0:
-            sample = shipped_df.sample(n=min(30, len(shipped_df)), random_state=42)
-        elif len(packed_df) > 0:
-            sample = packed_df.sample(n=min(30, len(packed_df)), random_state=42)
-        else:
-            sample = pd.DataFrame()
+            n = min(10, len(shipped_df))
+            selected = shipped_df.sample(n=n, random_state=42)
 
-        store_samples[store] = sample
+        elif len(packed_df) > 0:
+            n = min(10, len(packed_df))
+            selected = packed_df.sample(n=n, random_state=42)
+
+        else:
+            selected = pd.DataFrame()
+
+        store_samples[store] = selected
 
     st.success("Örnek siparişler seçildi. Trendyol kontrolü başlıyor...")
 
     # -------------------------------------------------------------------
-    # Shipped kontrolü
+    # Trendyol Shipped kontrolü
     # -------------------------------------------------------------------
     store_status = {}
     store_shipped_date = {}
@@ -249,7 +255,7 @@ if st.button("Kontrolü Başlat"):
             bg = "#4CAF50"
             border = "2px solid #4CAF50"
             text_color = "white"
-            status_text = "Kargo Uğrama: "
+            status_text = "Kargo Uğradı: "
             if shipped_date:
                 adjusted_date = shipped_date.replace(hour=shipped_date.hour + 3)
                 status_text += adjusted_date.strftime('%d.%m.%Y %H:%M')
