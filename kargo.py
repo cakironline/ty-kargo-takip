@@ -184,18 +184,20 @@ if st.button("Kontrolü Başlat"):
     # -------------------------------------------------------------------
     store_samples = {}
 
+    today_ts = pd.Timestamp(today).normalize()
+
     for store in df["store_name"].dropna().unique():
         store_df = df[df["store_name"] == store]
 
         shipped_df = store_df[
             (~store_df["shipped_at_dt"].isna()) &
-            (store_df["shipped_at_dt"].dt.normalize() == today.normalize()) &
+            (store_df["shipped_at_dt"].dt.normalize() == today_ts) &
             (store_df["shipped_at_dt"] < cutoff)
         ]
 
         packed_df = store_df[
             (~store_df["packed_at_dt"].isna()) &
-            (store_df["packed_at_dt"].dt.normalize() == today.normalize()) &
+            (store_df["packed_at_dt"].dt.normalize() == today_ts) &
             (store_df["packed_at_dt"] < cutoff)
         ]
 
