@@ -134,6 +134,7 @@ def fetch_trendyol_order_status(package_id_raw: str):
 
     shipment_package = content[0]
 
+    # Trendyol Express Marketplace olmayanlar alınmaz
     cargo_provider = shipment_package.get("cargoProviderName", "")
     if cargo_provider != "Trendyol Express Marketplace":
         return None, None
@@ -179,37 +180,27 @@ if st.button("Kontrolü Başlat"):
     df["shipped_at_dt"] = pd.to_datetime(df.get("shipped_at"), errors="coerce")
 
     # -------------------------------------------------------------------
-    # Mağaza bazlı seçim → 1) shipped_at bugün olanlar 2) shipped yoksa packed_at bugün olanlar
+    # Mağaza bazlı örnek sipariş seçimi → SADECE shipped_at kontrolü (packed_at hiç bakılmaz)
     # -------------------------------------------------------------------
     store_samples = {}
+
+    # pandas Timestamp'leri hazırlayalım
     today_ts = pd.Timestamp(today).normalize()
+    cutoff_ts = pd.Timestamp(cutoff)
 
     for store in df["store_name"].dropna().unique():
         store_df = df[df["store_name"] == store]
 
-        # 1) shipped_at bugünün tarihi olan siparişler (packed_at fark etmez)
+        # Sadece shipped_at bugünün tarihi olanlar (packed_at hiç kontrol edilmez)
         shipped_df = store_df[
             (~store_df["shipped_at_dt"].isna()) &
             (store_df["shipped_at_dt"].dt.normalize() == today_ts) &
-            (store_df["shipped_at_dt"] < cutoff)
-        ]
-
-        # 2) shipped_at YOK → packed_at bugünün tarihi olanlar
-        packed_df = store_df[
-            (store_df["shipped_at_dt"].isna()) &
-            (~store_df["packed_at_dt"].isna()) &
-            (store_df["packed_at_dt"].dt.normalize() == today_ts) &
-            (store_df["packed_at_dt"] < cutoff)
+            (store_df["shipped_at_dt"] < cutoff_ts)
         ]
 
         if len(shipped_df) > 0:
             n = min(10, len(shipped_df))
             selected = shipped_df.sample(n=n, random_state=42)
-
-        elif len(packed_df) > 0:
-            n = min(10, len(packed_df))
-            selected = packed_df.sample(n=n, random_state=42)
-
         else:
             selected = pd.DataFrame()
 
@@ -280,7 +271,12 @@ if st.button("Kontrolü Başlat"):
     # -------------------------------------------------------------------
     st.subheader("📋 Sipariş Logları")
 
-    log_df = pd.concat(store_samples.values(), ignore_index=True)
+    # Eğer tüm store_samples boşsa concat hata verir; guard ekleyelim
+    if len(store_samples) > 0 and any(not df.empty for df in store_samples.values()):
+        log_df = pd.concat([v for v in store_samples.values() if not v.empty], ignore_index=True)
+    else:
+        log_df = pd.DataFrame(columns=["store_name", "package_id_raw", "packed_at_dt", "shipped_at_dt"])
+
     log_df_display = log_df[["store_name", "package_id_raw", "packed_at_dt", "shipped_at_dt"]]
 
     st.dataframe(log_df_display)
