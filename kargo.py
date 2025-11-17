@@ -100,7 +100,7 @@ def fetch_hamur_orders(start_date, end_date):
     return all_orders
 
 # -------------------------------------------------------------------
-# Trendyol – shipped tarihi alma
+# Trendyol – shipped tarihi alma + cargoProviderName kontrolü
 # -------------------------------------------------------------------
 def fetch_trendyol_order_status(package_id_raw: str):
     if not package_id_raw:
@@ -133,10 +133,11 @@ def fetch_trendyol_order_status(package_id_raw: str):
 
     shipment_package = content[0]
 
+    # YENİ EKLENEN KONTROL
     cargo_provider = shipment_package.get("cargoProviderName", "")
     if cargo_provider != "Trendyol Express Marketplace":
         return None, None
-    
+
     status = shipment_package.get("status")
 
     shipped_created_date = None
@@ -177,17 +178,12 @@ if st.button("Kontrolü Başlat"):
     df["shipped_at_dt"] = pd.to_datetime(df.get("shipped_at"), errors="coerce")
 
     # -------------------------------------------------------------------
-    # Mağaza bazlı örnek sipariş seçimi
+    # Mağaza bazlı örnek sipariş seçimi (ÖNCE shipped, sonra packed)
     # -------------------------------------------------------------------
     store_samples = {}
+
     for store in df["store_name"].dropna().unique():
         store_df = df[df["store_name"] == store]
-
-        packed_df = store_df[
-            (~store_df["packed_at_dt"].isna()) &
-            (store_df["packed_at_dt"].dt.date == today.date()) &
-            (store_df["packed_at_dt"] < cutoff)
-        ]
 
         shipped_df = store_df[
             (~store_df["shipped_at_dt"].isna()) &
@@ -195,14 +191,21 @@ if st.button("Kontrolü Başlat"):
             (store_df["shipped_at_dt"] < cutoff)
         ]
 
-        n_packed = min(10, len(packed_df))
-        n_shipped = min(10, len(shipped_df))
+        packed_df = store_df[
+            (~store_df["packed_at_dt"].isna()) &
+            (store_df["packed_at_dt"].dt.date == today.date()) &
+            (store_df["packed_at_dt"] < cutoff)
+        ]
 
-        packed_sample = packed_df.sample(n=n_packed, random_state=42) if n_packed > 0 else pd.DataFrame()
-        shipped_sample = shipped_df.sample(n=n_shipped, random_state=42) if n_shipped > 0 else pd.DataFrame()
+        # Öncelik: shipped → packed
+        if len(shipped_df) > 0:
+            sample = shipped_df.sample(n=min(10, len(shipped_df)), random_state=42)
+        elif len(packed_df) > 0:
+            sample = packed_df.sample(n=min(10, len(packed_df)), random_state=42)
+        else:
+            sample = pd.DataFrame()
 
-        combined_sample = pd.concat([packed_sample, shipped_sample])
-        store_samples[store] = combined_sample
+        store_samples[store] = sample
 
     st.success("Örnek siparişler seçildi. Trendyol kontrolü başlıyor...")
 
