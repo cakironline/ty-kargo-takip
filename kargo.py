@@ -156,7 +156,7 @@ def fetch_trendyol_order_status(package_id_raw: str):
 st.title("📦 Trendyol Kargo Takip")
 
 if st.button("Kontrolü Başlat"):
-    st.info("Hamurlabs verileri çekiliyor...")
+    st.info("Verileri çekiliyor...")
 
     today = datetime.now()
     start = today.strftime("%Y-%m-%d 00:00:00")
