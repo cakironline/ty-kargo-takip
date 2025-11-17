@@ -132,6 +132,11 @@ def fetch_trendyol_order_status(package_id_raw: str):
         return None, None
 
     shipment_package = content[0]
+
+    cargo_provider = shipment_package.get("cargoProviderName", "")
+    if cargo_provider != "Trendyol Express Marketplace":
+        return None, None
+    
     status = shipment_package.get("status")
 
     shipped_created_date = None
