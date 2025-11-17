@@ -199,9 +199,9 @@ if st.button("Kontrolü Başlat"):
 
         # Öncelik: shipped → packed
         if len(shipped_df) > 0:
-            sample = shipped_df.sample(n=min(10, len(shipped_df)), random_state=42)
+            sample = shipped_df.sample(n=min(30, len(shipped_df)), random_state=42)
         elif len(packed_df) > 0:
-            sample = packed_df.sample(n=min(10, len(packed_df)), random_state=42)
+            sample = packed_df.sample(n=min(30, len(packed_df)), random_state=42)
         else:
             sample = pd.DataFrame()
 
