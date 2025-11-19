@@ -188,7 +188,7 @@ if st.button("Kontrolü Başlat"):
     for store in df["store_name"].dropna().unique():
         store_df = df[
             (df["store_name"] == store) &
-            (df["status"].isin(["invoiced", "loaded_delivery", "shipped"]))
+            (df["status"].isin(["Invoiced", "Loaded Delivery", "Shipped"]))
         ]
         
 
