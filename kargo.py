@@ -205,7 +205,7 @@ if st.button("Kontrolü Başlat"):
 
         store_samples[store] = selected
 
-    st.success("Örnek siparişler seçildi. Trendyol kontrolü başlıyor...")
+    st.success("Trendyol kontrolü başlıyor...")
 
     # -------------------------------------------------------------------
     # Trendyol Shipped kontrolü
