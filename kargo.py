@@ -101,7 +101,7 @@ def fetch_hamur_orders(start_date, end_date):
 
 
 # -------------------------------------------------------------------
-# Trendyol – shipped tarihi alma (cargoProviderName filtresi ile)
+# Trendyol – shipped tarihi alma
 # -------------------------------------------------------------------
 def fetch_trendyol_order_status(package_id_raw: str):
     if not package_id_raw:
@@ -134,7 +134,6 @@ def fetch_trendyol_order_status(package_id_raw: str):
 
     shipment_package = content[0]
 
-    # Trendyol Express Marketplace olmayanlar alınmaz
     cargo_provider = shipment_package.get("cargoProviderName", "")
     if cargo_provider != "Trendyol Express Marketplace":
         return None, None
@@ -161,7 +160,6 @@ if st.button("Kontrolü Başlat"):
     today = datetime.now()
     start = today.strftime("%Y-%m-%d 00:00:00")
     end = today.strftime("%Y-%m-%d 23:59:59")
-    cutoff = today.replace(hour=18, minute=0, second=0, microsecond=0)
 
     orders = fetch_hamur_orders(start, end)
     if not orders:
@@ -180,27 +178,24 @@ if st.button("Kontrolü Başlat"):
     df["shipped_at_dt"] = pd.to_datetime(df.get("shipped_at"), errors="coerce")
 
     # -------------------------------------------------------------------
-    # Mağaza bazlı örnek sipariş seçimi → SADECE shipped_at kontrolü (packed_at hiç bakılmaz)
+    # Mağaza bazlı örnek sipariş seçimi → SADECE packed_at (dün & bugün)
     # -------------------------------------------------------------------
     store_samples = {}
 
-    # pandas Timestamp'leri hazırlayalım
     today_ts = pd.Timestamp(today).normalize()
-    cutoff_ts = pd.Timestamp(cutoff)
+    yesterday_ts = today_ts - pd.Timedelta(days=1)
 
     for store in df["store_name"].dropna().unique():
         store_df = df[df["store_name"] == store]
 
-        # Sadece shipped_at bugünün tarihi olanlar (packed_at hiç kontrol edilmez)
-        shipped_df = store_df[
-            (~store_df["shipped_at_dt"].isna()) &
-            (store_df["shipped_at_dt"].dt.normalize() == today_ts) &
-            (store_df["shipped_at_dt"] < cutoff_ts)
+        packed_df = store_df[
+            (~store_df["packed_at_dt"].isna()) &
+            (store_df["packed_at_dt"].dt.normalize().isin([yesterday_ts, today_ts]))
         ]
 
-        if len(shipped_df) > 0:
-            n = min(10, len(shipped_df))
-            selected = shipped_df.sample(n=n, random_state=42)
+        if len(packed_df) > 0:
+            n = min(15, len(packed_df))
+            selected = packed_df.sample(n=n, random_state=42)
         else:
             selected = pd.DataFrame()
 
@@ -265,5 +260,3 @@ if st.button("Kontrolü Başlat"):
                     <p style='margin:0; color:{text_color};'>{status_text}</p>
                 </div>
             """, unsafe_allow_html=True)
-
-
