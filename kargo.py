@@ -155,7 +155,7 @@ def fetch_trendyol_order_status(package_id_raw: str):
 st.title("📦 Trendyol Kargo Takip")
 
 if st.button("Kontrolü Başlat"):
-    st.info("Verileri çekiliyor...")
+    st.info("Veriler çekiliyor...")
 
     today = datetime.now()
     start = today.strftime("%Y-%m-%d 00:00:00")
@@ -186,7 +186,11 @@ if st.button("Kontrolü Başlat"):
     yesterday_ts = today_ts - pd.Timedelta(days=1)
 
     for store in df["store_name"].dropna().unique():
-        store_df = df[df["store_name"] == store]
+        store_df = df[
+            (df["store_name"] == store) &
+            (df["status"].isin(["invoiced", "loaded_delivery", "shipped"]))
+        ]
+        
 
         packed_df = store_df[
             (~store_df["packed_at_dt"].isna()) &
