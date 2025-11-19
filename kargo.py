@@ -198,7 +198,7 @@ if st.button("Kontrolü Başlat"):
         ]
 
         if len(packed_df) > 0:
-            n = min(15, len(packed_df))
+            n = min(30, len(packed_df))
             selected = packed_df.sample(n=n, random_state=42)
         else:
             selected = pd.DataFrame()
