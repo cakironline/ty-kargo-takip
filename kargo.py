@@ -9,7 +9,7 @@ import time
 # TELEGRAM AYARLARI
 # -------------------------------------------------------------------
 TELEGRAM_BOT_TOKEN = "8236447530:AAHauUFiObcgHZftAQhOjO8OwI4kYCygBvg"
-TELEGRAM_GROUP_ID = "-5082257217"
+TELEGRAM_GROUP_ID = "-1003294991997"
 
 def send_telegram_message(text):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
