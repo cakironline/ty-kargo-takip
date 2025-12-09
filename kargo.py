@@ -1,260 +1,196 @@
 import streamlit as st
-import pandas as pd
 import requests
 import base64
-from datetime import datetime
-import time
+from datetime import datetime, timedelta, timezone
+import pandas as pd
+import os
+import json
 
-# -------------------------------------------------------------------
-# TELEGRAM AYARLARI
-# -------------------------------------------------------------------
-TELEGRAM_BOT_TOKEN = "8236447530:AAHauUFiObcgHZftAQhOjO8OwI4kYCygBvg"
-TELEGRAM_GROUP_ID = "-1003294991997"
+# ---------------------------------------------------
+API_KEY = "BTDnnGqkUveH8tSlGFC4"
+API_SECRET = "wwDwc4pXf4J563N1pJww"
+SELLER_ID = "107703"
 
-def send_telegram_message(text):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    data = {
-        "chat_id": TELEGRAM_GROUP_ID,
-        "text": text
-    }
-    try:
-        requests.post(url, data=data, timeout=10)
-    except:
-        pass
+# ---------------------------------------------------
+JSON_FILE = "today_orders.json"
 
-# -------------------------------------------------------------------
-# OTOMATİK 5 DAKİKADA BİR YENİLEME
-# -------------------------------------------------------------------
-if "last_refresh" not in st.session_state:
-    st.session_state.last_refresh = time.time()
+# ✅ GÜNLÜK JSON KONTROLÜ (HER GÜN SIFIRLAR)
+def today_file_check():
+    today = datetime.now().strftime("%Y-%m-%d")
+    if not os.path.exists(JSON_FILE):
+        with open(JSON_FILE, "w", encoding="utf-8") as f:
+            json.dump({"date": today, "data": []}, f, ensure_ascii=False, indent=2)
+        return
+    with open(JSON_FILE, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if data.get("date") != today:
+        with open(JSON_FILE, "w", encoding="utf-8") as f:
+            json.dump({"date": today, "data": []}, f, ensure_ascii=False, indent=2)
 
-if time.time() - st.session_state.last_refresh > 300:
-    st.session_state.last_refresh = time.time()
-    st.rerun()
+# ✅ KAYITLARI OKU
+def load_saved_orders():
+    today_file_check()
+    with open(JSON_FILE, "r", encoding="utf-8") as f:
+        return json.load(f).get("data", [])
 
-# -------------------------------------------------------------------
-# DAHA ÖNCE BİLDİRİLEN MAĞAZALAR (HAFIZA)
-# -------------------------------------------------------------------
-if "notified_stores" not in st.session_state:
-    st.session_state.notified_stores = set()
+# ✅ GÜVENLİ KAYDETME (DUPLICATE ENGELLİ)
+def save_orders(new_orders):
+    today_file_check()
+    with open(JSON_FILE, "r", encoding="utf-8") as f:
+        file_data = json.load(f)
+    existing = file_data.get("data", [])
+    existing_trackers = {o["Tracker Code"] for o in existing if isinstance(o, dict) and "Tracker Code" in o}
+    for o in new_orders:
+        if isinstance(o, dict) and o.get("Tracker Code") not in existing_trackers:
+            existing.append(o)
+            existing_trackers.add(o.get("Tracker Code"))
+    with open(JSON_FILE, "w", encoding="utf-8") as f:
+        json.dump({"date": datetime.now().strftime("%Y-%m-%d"), "data": existing}, f, ensure_ascii=False, indent=2)
+    return existing
 
-# -------------------------------------------------------------------
-# Sayfa ayarları
-# -------------------------------------------------------------------
-st.set_page_config(page_title="Trendyol Kargo Takip", layout="wide")
-st.title("📦 Trendyol Kargo Takip")
-
-# -------------------------------------------------------------------
-# Hamurlabs API
-# -------------------------------------------------------------------
-HAMURLABS_URL = "http://dgn.hamurlabs.io/api/order/v2/search/"
-HAMURLABS_HEADERS = {
-    "Authorization": "Basic c2VsaW0uc2FyaWtheWE6NDMxMzQyNzhDY0A=",
-    "Content-Type": "application/json"
-}
-
-# -------------------------------------------------------------------
-# Trendyol API
-# -------------------------------------------------------------------
-TRENDYOL_SELLER_ID = "107703"
-TRENDYOL_API_KEY = "BTDnnGqkUveH8tSlGFC4"
-TRENDYOL_API_SECRET = "wwDwc4pXf4J563N1pJww"
-
-auth_str = f"{TRENDYOL_API_KEY}:{TRENDYOL_API_SECRET}"
-auth_base64 = base64.b64encode(auth_str.encode("utf-8")).decode("utf-8")
-
-TRENDYOL_HEADERS = {
-    "User-Agent": "Trendyol",
-    "Authorization": f"Basic {auth_base64}"
-}
-
-# -------------------------------------------------------------------
-# Warehouse → Mağaza Mapping
-# -------------------------------------------------------------------
+# ✅ WAREHOUSE MAP (trendyol_id ve name)
 WAREHOUSE_MAP = {
-    "4216": "Ereğli", "27005": "Karataş", "27004": "Gazikent", "6101": "Trabzon",
-    "27003": "İpekyolu", "4215": "Meram", "46002": "Binevler", "TOM": "TOM",
-    "27001": "Sanko", "4203": "Kampüs", "46001": "Piazza", "4200": "Merkez Ayakkabı",
-    "4201": "Merkez Giyim", "4210": "Novada", "4214": "Fabrika Satış",
-    "46012": "Oniki Şubat", "27000": "Gazimuhtar", "27002": "Suburcu",
-    "4207": "BosnaMix", "4212": "Real", "4206": "Plus", "M": "Aykent Depo",
-    "4202": "Sportive"
+    7837766: "Ereğli", 7837780: "Karataş", 7623793: "Gazikent", 7507303: "Trabzon",
+    7261659: "İpekyolu", 7261658: "Meram", 7837765: "Binevler", 6503006: "TOM",
+    6502825: "Sanko", 6502790: "Kampüs", 6502985: "Piazza", 6502771: "Merkez Ayakkabı",
+    6502772: "Merkez Giyim", 6502791: "Novada", 7489194: "Fabrika Satış", 6502994: "Oniki Şubat",
+    6502797: "Gazimuhtar", 6502816: "Suburcu", 6502789: "BosnaMix", 6502787: "Real",
+    6502784: "Plus", 148560: "Aykent Depo", 6502783: "Sportive"
 }
 
-# -------------------------------------------------------------------
-# HamurLabs’tan Sipariş Çekme
-# -------------------------------------------------------------------
-def fetch_hamur_orders(start_date, end_date):
-    all_orders = []
-    payload = {
-        "company_id": "1",
-        "updated_at__start": start_date,
-        "updated_at__end": end_date,
-        "size": 50,
-        "start": 0,
-        "shop_id": "2",
-        "tracker_code": "",
-        "order_types": ["selling"]
-    }
+# === TRENDYOL AUTH ===
+auth_str = f"{API_KEY}:{API_SECRET}"
+b64_auth = base64.b64encode(auth_str.encode()).decode()
+headers = {
+    "Authorization": f"Basic {b64_auth}",
+    "Content-Type": "application/json",
+    "User-Agent": "Cakir-Kargo-Bot"
+}
 
-    while True:
-        resp = requests.post(HAMURLABS_URL, headers=HAMURLABS_HEADERS, json=payload)
-        if resp.status_code != 200:
-            break
+# === GMT+3 TARİH HESAPLAMA ===
+GMT3 = timezone(timedelta(hours=3))
+now = datetime.now(GMT3)
+start_of_day = datetime(now.year, now.month, now.day, tzinfo=GMT3)
+end_of_day = start_of_day + timedelta(days=1)
+start_ts = int(start_of_day.timestamp() * 1000)
+end_ts = int(end_of_day.timestamp() * 1000)
 
-        data = resp.json()
-        orders = data.get("data", [])
-        all_orders.extend(orders)
+URL = f"https://apigw.trendyol.com/integration/order/sellers/{SELLER_ID}/orders"
 
-        total = data.get("total", 0)
-        if payload["start"] + payload["size"] >= total:
-            break
+# ✅ GMT+3 uyumlu bugünkü kontrol
+def is_today(timestamp_ms):
+    dt = datetime.fromtimestamp(timestamp_ms / 1000, GMT3)
+    return dt.date() == datetime.now(GMT3).date()
 
-        payload["start"] += payload["size"]
+# ✅ MAĞAZA ZİYARETLERİ HESABI
+def calculate_store_visits(df):
+    store_visits = {}
+    for _, row in df.iterrows():
+        store = row["Mağaza"]
+        time_obj = datetime.strptime(row["Kargoya Verilme Zamanı"], "%d-%m-%Y %H:%M:%S")
+        if store not in store_visits or time_obj < store_visits[store]:
+            store_visits[store] = time_obj
+    return store_visits
 
-    return all_orders
-
-# -------------------------------------------------------------------
-# Trendyol – shipped tarihi alma
-# -------------------------------------------------------------------
-def fetch_trendyol_order_status(package_id_raw: str):
-    if not package_id_raw:
-        return None, None
-    try:
-        package_id = int(package_id_raw.split("_")[0])
-    except:
-        return None, None
-
-    url = f"https://apigw.trendyol.com/integration/order/sellers/{TRENDYOL_SELLER_ID}/orders"
-    params = {
-        "shipmentPackageIds": package_id,
-        "size": 1,
-        "orderByField": "PackageLastModifiedDate",
-        "orderByDirection": "DESC"
-    }
-
-    try:
-        resp = requests.get(url, headers=TRENDYOL_HEADERS, params=params, timeout=15)
-    except:
-        return None, None
-
-    if resp.status_code != 200:
-        return None, None
-
-    data = resp.json()
-    content = data.get("content", [])
-    if not content:
-        return None, None
-
-    shipment_package = content[0]
-    if shipment_package.get("cargoProviderName") != "Trendyol Express Marketplace":
-        return None, None
-
-    status = shipment_package.get("status")
-
-    shipped_created_date = None
-    for hist in shipment_package.get("packageHistories", []):
-        if hist.get("status") == "Shipped":
-            shipped_created_date = datetime.fromtimestamp(hist["createdDate"] / 1000)
-            break
-
-    return status, shipped_created_date
-
-# -------------------------------------------------------------------
-# OTOMATİK ÇALIŞTIR (BUTONSUZ)
-# -------------------------------------------------------------------
-today = datetime.now()
-start = today.strftime("%Y-%m-%d 00:00:00")
-end = today.strftime("%Y-%m-%d 23:59:59")
-
-orders = fetch_hamur_orders(start, end)
-if not orders:
-    st.stop()
-
-df = pd.json_normalize(orders)
-df = df[df.get("source") == "Trendyol"]
-
-df["package_id_raw"] = df["tracker_code"].astype(str)
-df["store_name"] = df["warehouse_code"].map(WAREHOUSE_MAP)
-df["packed_at_dt"] = pd.to_datetime(df.get("packed_at"), errors="coerce")
-df["shipped_at_dt"] = pd.to_datetime(df.get("shipped_at"), errors="coerce")
-
-store_samples = {}
-today_ts = pd.Timestamp(today).normalize()
-yesterday_ts = today_ts - pd.Timedelta(days=1)
-
-for store in df["store_name"].dropna().unique():
-    store_df = df[(df["store_name"] == store)]
-    packed_df = store_df[
-        (~store_df["packed_at_dt"].isna()) &
-        (store_df["packed_at_dt"].dt.normalize().isin([yesterday_ts, today_ts]))
-    ]
-    store_samples[store] = packed_df.head(30)
-
-store_status = {}
-store_shipped_date = {}
-
-for store, samples_df in store_samples.items():
-    shipped_found = False
-    first_shipped_date = None
-
-    for _, row in samples_df.iterrows():
-        status, shipped_date = fetch_trendyol_order_status(row["package_id_raw"])
-
-        if status == "Shipped":
-            shipped_found = True
-            if first_shipped_date is None or (shipped_date and shipped_date < first_shipped_date):
-                first_shipped_date = shipped_date
-
-    store_status[store] = shipped_found
-    store_shipped_date[store] = first_shipped_date
-
-    # ✅ TELEGRAM BİLDİRİM (SADECE İLK YEŞİLDE)
-    if shipped_found and store not in st.session_state.notified_stores:
-        st.session_state.notified_stores.add(store)
-
-        if first_shipped_date:
-            adjusted_date = first_shipped_date + pd.Timedelta(hours=3)
-            saat_str = adjusted_date.strftime("%d.%m.%Y %H:%M")
+# ✅ MAĞAZA KARTLARI
+def show_store_cards(store_visits):
+    st.subheader("🏬 Mağaza Kargo Uğrama Durumu")
+    now_time = datetime.now().time()
+    after_15 = now_time >= datetime.strptime("15:00", "%H:%M").time()
+    visited, not_visited = [], []
+    for name in WAREHOUSE_MAP.values():
+        if name in store_visits and store_visits[name] is not None:
+            visited.append((name, store_visits[name]))
         else:
-            saat_str = "Saat bilgisi yok"
+            not_visited.append(name)
+    visited.sort(key=lambda x: x[1])
+    all_cards = visited + [(name, None) for name in not_visited]
+    cols = st.columns(5)
+    for i, (name, visit_time) in enumerate(all_cards):
+        col = cols[i % 5]
+        if visit_time is not None:
+            time_str = visit_time.strftime('%H:%M:%S')
+            col.markdown(f"""
+                <div style="background-color:#2ecc71; padding:20px; border-radius:15px; color:white; text-align:center; min-height:150px;">
+                    <h4>{name}</h4>
+                    <p>Kargo Uğradı ✅</p>
+                    <b>{time_str}</b>
+                </div>""", unsafe_allow_html=True)
+        else:
+            shake = "animation:shake 0.5s infinite;" if after_15 else ""
+            col.markdown(f"""
+                <div style="background-color:#e74c3c; padding:20px; border-radius:15px; color:white; text-align:center; min-height:150px; {shake}">
+                    <h4>{name}</h4>
+                    <p>Kargo Uğramadı ❌</p>
+                </div>""", unsafe_allow_html=True)
+    st.markdown("""
+        <style>
+        @keyframes shake {
+            0% { transform: translateX(0px); }
+            25% { transform: translateX(4px); }
+            50% { transform: translateX(0px); }
+            75% { transform: translateX(-4px); }
+            100% { transform: translateX(0px); }
+        }
+        </style>""", unsafe_allow_html=True)
 
-        mesaj = f"""✅ KARGO UĞRADI
-🏬 Mağaza: {store}
-🕒 Saat: {saat_str}"""
+# ✅ STREAMLIT
+st.set_page_config(layout="wide")
+st.title("📦 Günlük Mağaza Kargo Takibi")
 
-        send_telegram_message(mesaj)
+if st.button("Siparişleri Çek"):
+    with st.spinner("Trendyol verileri çekiliyor..."):
+        all_orders_data = []
+        page = 0
+        size = 200
+        while True:
+            params = {
+                "status": "Shipped",
+                "startDate": start_ts,
+                "endDate": end_ts,
+                "page": page,
+                "size": size,
+                "orderByField": "PackageLastModifiedDate",
+                "orderByDirection": "DESC"
+            }
+            response = requests.get(URL, headers=headers, params=params)
+            if response.status_code != 200:
+                st.error(f"Trendyol'dan veri alınamadı (Sayfa {page})")
+                st.code(response.text)
+                break
+            data = response.json()
+            orders = data.get("content", [])
+            if not orders:
+                break
+            all_orders_data.extend(orders)
+            page += 1
 
-# -------------------------------------------------------------------
-# GRID GÖSTERİM
-# -------------------------------------------------------------------
-sorted_stores = sorted(store_status.items(), key=lambda x: not x[1])
-st.subheader("📍 Mağaza Durumları")
-stores_per_row = 5
-row_columns = []
+        rows = []
+        for o in all_orders_data:
+            shipped_time_today = None
+            for h in o.get("packageHistories", []):
+                if h.get("status") == "Shipped" and is_today(h.get("createdDate")):
+                    shipped_time_today = datetime.fromtimestamp(h["createdDate"]/1000, GMT3).strftime("%d-%m-%Y %H:%M:%S")
+                    break
+            if not shipped_time_today:
+                continue
 
-for i, (store, shipped_ok) in enumerate(sorted_stores):
-    if i % stores_per_row == 0:
-        row_columns = st.columns(stores_per_row)
-    col = row_columns[i % stores_per_row]
+            order_no = o.get("orderNumber")
+            package_id = o.get("shipmentPackageId")
+            tracker_code = f"{package_id}_{order_no}"
 
-    shipped_date = store_shipped_date[store]
-    if shipped_ok:
-        bg = "#4CAF50"
-        status_text = "Kargo Uğradı: "
-        if shipped_date:
-            adjusted_date = shipped_date + pd.Timedelta(hours=3)
-            status_text += adjusted_date.strftime('%d.%m.%Y %H:%M')
-    else:
-        bg = "#FF4C4C"
-        status_text = "Kargo Henüz Uğramamış."
+            warehouse_id = o.get("warehouseId")
+            warehouse_name = WAREHOUSE_MAP.get(warehouse_id)
+            if not warehouse_name:
+                warehouse_name = "Bilinmeyen Depo"
 
-    with col:
-        st.markdown(f"""
-            <div style='background-color:{bg}; border-radius:12px; padding:20px; height:150px;
-                        display:flex; flex-direction:column; justify-content:center;
-                        align-items:center; text-align:center; color:white;'>
-                <h3 style='margin:0 0 10px 0;'>{store}</h3>
-                <p style='margin:0;'>{status_text}</p>
-            </div>
-        """, unsafe_allow_html=True)
+            rows.append({
+                "Tracker Code": tracker_code,
+                "Kargoya Verilme Zamanı": shipped_time_today,
+                "Mağaza": warehouse_name
+            })
+
+        all_orders = save_orders(rows)
+        df = pd.DataFrame(all_orders)
+        store_visits = calculate_store_visits(df)
+        show_store_cards(store_visits)
