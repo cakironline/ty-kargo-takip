@@ -48,7 +48,7 @@ def save_orders(new_orders):
         json.dump({"date": datetime.now().strftime("%Y-%m-%d"), "data": existing}, f, ensure_ascii=False, indent=2)
     return existing
 
-# ✅ WAREHOUSE MAP (trendyol_id ve name)
+# ✅ WAREHOUSE MAP
 WAREHOUSE_MAP = {
     7837766: "Ereğli", 7837780: "Karataş", 7623793: "Gazikent", 7507303: "Trabzon",
     7261659: "İpekyolu", 7261658: "Meram", 7837765: "Binevler", 6503006: "TOM",
@@ -82,7 +82,7 @@ def is_today(timestamp_ms):
     dt = datetime.fromtimestamp(timestamp_ms / 1000, GMT3)
     return dt.date() == datetime.now(GMT3).date()
 
-# ✅ MAĞAZA ZİYARETLERİ HESABI
+# ✅ MAĞAZA ZİYARETLERİ
 def calculate_store_visits(df):
     store_visits = {}
     for _, row in df.iterrows():
@@ -92,27 +92,45 @@ def calculate_store_visits(df):
             store_visits[store] = time_obj
     return store_visits
 
-# ✅ MAĞAZA KARTLARI
+# ✅ ROZETLİ MAĞAZA KARTLARI
 def show_store_cards(store_visits):
     st.subheader("🏬 Mağaza Kargo Uğrama Durumu")
     now_time = datetime.now().time()
     after_15 = now_time >= datetime.strptime("15:00", "%H:%M").time()
+
     visited, not_visited = [], []
-    for name in WAREHOUSE_MAP.values():
+
+    for code, name in WAREHOUSE_MAP.items():
         if name in store_visits and store_visits[name] is not None:
-            visited.append((name, store_visits[name]))
+            visited.append((code, name, store_visits[name]))
         else:
-            not_visited.append(name)
-    visited.sort(key=lambda x: x[1])
-    all_cards = visited + [(name, None) for name in not_visited]
+            not_visited.append((code, name))
+
+    visited.sort(key=lambda x: x[2])
+    all_cards = visited + [(code, name, None) for code, name in not_visited]
+
     cols = st.columns(5)
-    for i, (name, visit_time) in enumerate(all_cards):
+
+    for i, (code, name, visit_time) in enumerate(all_cards):
         col = cols[i % 5]
+
+        badge_html = f"""
+        <span style="
+            background:#2c3e50;
+            padding:4px 9px;
+            border-radius:10px;
+            font-size:11px;
+            margin-left:6px;
+            color:white;">
+            {code}
+        </span>
+        """
+
         if visit_time is not None:
             time_str = visit_time.strftime('%H:%M:%S')
             col.markdown(f"""
                 <div style="background-color:#2ecc71; padding:20px; border-radius:15px; color:white; text-align:center; min-height:150px;">
-                    <h4>{name}</h4>
+                    <h4>{name} {badge_html}</h4>
                     <p>Kargo Uğradı ✅</p>
                     <b>{time_str}</b>
                 </div>""", unsafe_allow_html=True)
@@ -120,19 +138,21 @@ def show_store_cards(store_visits):
             shake = "animation:shake 0.5s infinite;" if after_15 else ""
             col.markdown(f"""
                 <div style="background-color:#e74c3c; padding:20px; border-radius:15px; color:white; text-align:center; min-height:150px; {shake}">
-                    <h4>{name}</h4>
+                    <h4>{name} {badge_html}</h4>
                     <p>Kargo Uğramadı ❌</p>
                 </div>""", unsafe_allow_html=True)
+
     st.markdown("""
-        <style>
-        @keyframes shake {
-            0% { transform: translateX(0px); }
-            25% { transform: translateX(4px); }
-            50% { transform: translateX(0px); }
-            75% { transform: translateX(-4px); }
-            100% { transform: translateX(0px); }
-        }
-        </style>""", unsafe_allow_html=True)
+    <style>
+    @keyframes shake {
+        0% { transform: translateX(0px); }
+        25% { transform: translateX(4px); }
+        50% { transform: translateX(0px); }
+        75% { transform: translateX(-4px); }
+        100% { transform: translateX(0px); }
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 # ✅ STREAMLIT
 st.set_page_config(layout="wide")
@@ -143,6 +163,7 @@ if st.button("Siparişleri Çek"):
         all_orders_data = []
         page = 0
         size = 200
+
         while True:
             params = {
                 "status": "Shipped",
@@ -153,25 +174,30 @@ if st.button("Siparişleri Çek"):
                 "orderByField": "PackageLastModifiedDate",
                 "orderByDirection": "DESC"
             }
+
             response = requests.get(URL, headers=headers, params=params)
             if response.status_code != 200:
                 st.error(f"Trendyol'dan veri alınamadı (Sayfa {page})")
                 st.code(response.text)
                 break
+
             data = response.json()
             orders = data.get("content", [])
             if not orders:
                 break
+
             all_orders_data.extend(orders)
             page += 1
 
         rows = []
+
         for o in all_orders_data:
             shipped_time_today = None
             for h in o.get("packageHistories", []):
                 if h.get("status") == "Shipped" and is_today(h.get("createdDate")):
-                    shipped_time_today = datetime.fromtimestamp(h["createdDate"]/1000, GMT3).strftime("%d-%m-%Y %H:%M:%S")
+                    shipped_time_today = datetime.fromtimestamp(h["createdDate"] / 1000, GMT3).strftime("%d-%m-%Y %H:%M:%S")
                     break
+
             if not shipped_time_today:
                 continue
 
@@ -180,9 +206,7 @@ if st.button("Siparişleri Çek"):
             tracker_code = f"{package_id}_{order_no}"
 
             warehouse_id = o.get("warehouseId")
-            warehouse_name = WAREHOUSE_MAP.get(warehouse_id)
-            if not warehouse_name:
-                warehouse_name = "Bilinmeyen Depo"
+            warehouse_name = WAREHOUSE_MAP.get(warehouse_id, "Bilinmeyen Depo")
 
             rows.append({
                 "Tracker Code": tracker_code,
