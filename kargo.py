@@ -192,6 +192,11 @@ if st.button("Siparişleri Çek"):
         rows = []
 
         for o in all_orders_data:
+
+            if o.get("cargoProviderName") != "Trendyol Express":
+                continue
+
+            
             shipped_time_today = None
             for h in o.get("packageHistories", []):
                 if h.get("status") == "Shipped" and is_today(h.get("createdDate")):
