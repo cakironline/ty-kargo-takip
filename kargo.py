@@ -96,7 +96,7 @@ def calculate_store_visits(df):
 def show_store_cards(store_visits):
     st.subheader("🏬 Mağaza Kargo Uğrama Durumu")
     now_time = datetime.now().time()
-    after_15 = now_time >= datetime.strptime("15:00", "%H:%M").time()
+    after_15 = now_time >= datetime.strptime("12:00", "%H:%M").time()
 
     visited, not_visited = [], []
 
