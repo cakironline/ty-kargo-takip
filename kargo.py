@@ -193,7 +193,8 @@ if st.button("Siparişleri Çek"):
 
         for o in all_orders_data:
 
-
+            if o.get("cargoProviderName") != "Trendyol Express":
+                continue
 
             
             shipped_time_today = None
